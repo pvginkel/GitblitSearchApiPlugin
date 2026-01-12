@@ -1,0 +1,6 @@
+Manifest-Version: 1.0
+Plugin-Id: searchplugin
+Plugin-Class: com.gitblit.plugin.search.SearchPlugin
+Plugin-Version: 1.0.0
+Plugin-Requires: 1.5.0
+Plugin-Provider: Custom
