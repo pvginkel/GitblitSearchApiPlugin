@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "mcp-support-plugin-tests"
+version = "1.0.0"
+description = "Test suite for Gitblit MCP Support Plugin"
+authors = ["Developer"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.31.0"
+pytest = "^8.0.0"
+pytest-env = "^1.1.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+env = [
+    "GITBLIT_URL=http://10.1.2.3:8080",
+]
