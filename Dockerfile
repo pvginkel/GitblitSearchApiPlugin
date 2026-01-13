@@ -16,7 +16,7 @@ RUN mvn clean package -q -DskipTests
 # Final stage - minimal image with just the plugin
 FROM busybox:latest
 
-COPY --from=build /build/target/searchplugin-*.zip /plugins/
+COPY --from=build /build/target/mcp-support-plugin-*.zip /plugins/
 
 # Keep container alive if run directly (optional, for debugging)
 CMD ["sh", "-c", "echo 'Plugin available at /plugins'; ls -la /plugins; sleep infinity"]

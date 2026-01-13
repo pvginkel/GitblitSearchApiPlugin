@@ -1,6 +1,6 @@
 Manifest-Version: 1.0
-Plugin-Id: searchplugin
-Plugin-Class: com.gitblit.plugin.search.SearchPlugin
+Plugin-Id: mcp-support-plugin
+Plugin-Class: com.gitblit.plugin.mcp.MCPSupportPlugin
 Plugin-Version: 1.0.0
 Plugin-Requires: 1.5.0
 Plugin-Provider: Custom
