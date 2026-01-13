@@ -154,24 +154,23 @@ class TestCommitSearchEndpoint:
         # Query should include user's search terms
         assert "bug fix" in data["query"]
 
-    def test_wildcard_only_query_returns_error(self, api_client, indexed_repo):
-        """Test that wildcard-only queries return a 400 error instead of crashing.
+    def test_wildcard_query_returns_commits(self, api_client, indexed_repo):
+        """Test that wildcard queries return commits for browsing.
 
-        Regression test for issue where query='*' caused a Lucene error and
-        returned an HTML error page instead of JSON.
+        query='*' with repos should return all indexed commits in the repository,
+        useful for browsing recent commit history.
         """
-        # Test various wildcard-only patterns
-        wildcard_queries = ["*", "?", "* *", "**", "*?*"]
+        response = api_client.search_commits(query="*", repos=indexed_repo, count=10)
 
-        for query in wildcard_queries:
-            response = api_client.search_commits(query=query, repos=indexed_repo)
+        assert response.status_code == 200, \
+            f"Wildcard query should return 200, got {response.status_code}"
 
-            # Should return 400 Bad Request, not 500
-            assert response.status_code == 400, \
-                f"Query '{query}' should return 400, got {response.status_code}"
+        data = response.json()
+        assert "commits" in data
+        assert len(data["commits"]) > 0, "Wildcard query should return commits"
 
-            # Should return valid JSON error
-            data = response.json()
-            assert "error" in data, f"Query '{query}' should return JSON error"
-            assert "wildcard" in data["error"].lower(), \
-                f"Error message should mention wildcard: {data['error']}"
+        # Verify commit structure
+        for commit in data["commits"]:
+            assert "repository" in commit
+            assert "commit" in commit
+            assert "author" in commit

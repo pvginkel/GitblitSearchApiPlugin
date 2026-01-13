@@ -52,18 +52,26 @@ public class FileSearchHandler implements RequestHandler {
             return;
         }
 
-        // Reject wildcard-only queries (causes Lucene errors)
-        if (isWildcardOnlyQuery(query)) {
-            ResponseWriter.writeError(response, HttpServletResponse.SC_BAD_REQUEST,
-                "Wildcard-only queries are not supported. Please provide a search term.");
-            return;
-        }
-
         // Parse optional parameters
         String reposParam = request.getParameter("repos");
         String pathPattern = request.getParameter("pathPattern");
         String branch = request.getParameter("branch");
         int count = parseIntParam(request, "count", DEFAULT_COUNT);
+
+        // Check if this is a wildcard-only query (e.g., "*")
+        boolean isWildcardQuery = isWildcardOnlyQuery(query);
+
+        // Wildcard queries require at least one filter to prevent unbounded results
+        if (isWildcardQuery) {
+            boolean hasFilter = !StringUtils.isEmpty(reposParam) ||
+                               !StringUtils.isEmpty(pathPattern) ||
+                               !StringUtils.isEmpty(branch);
+            if (!hasFilter) {
+                ResponseWriter.writeError(response, HttpServletResponse.SC_BAD_REQUEST,
+                    "Wildcard queries require at least one filter: repos, pathPattern, or branch");
+                return;
+            }
+        }
 
         // Cap count
         if (count < 1) count = DEFAULT_COUNT;
@@ -73,8 +81,10 @@ public class FileSearchHandler implements RequestHandler {
         StringBuilder luceneQuery = new StringBuilder();
         luceneQuery.append("type:blob");
 
-        // Add the user's query
-        luceneQuery.append(" AND (").append(query).append(")");
+        // Add the user's query (skip for wildcard queries - just match all blobs)
+        if (!isWildcardQuery) {
+            luceneQuery.append(" AND (").append(query).append(")");
+        }
 
         // Note: pathPattern is applied as post-filter because Lucene wildcard queries
         // with leading wildcards (like *.java) cause errors in Gitblit's highlighting code
@@ -145,14 +155,16 @@ public class FileSearchHandler implements RequestHandler {
             fileResult.commitId = sr.commitId;
             fileResult.chunks = new ArrayList<>();
 
-            // Fetch context chunk
-            try {
-                FileSearchResponse.Chunk chunk = fetchChunk(gitblit, sr, CONTEXT_LINES);
-                if (chunk != null) {
-                    fileResult.chunks.add(chunk);
+            // Fetch context chunk (skip for wildcard queries to reduce response size)
+            if (!isWildcardQuery) {
+                try {
+                    FileSearchResponse.Chunk chunk = fetchChunk(gitblit, sr, CONTEXT_LINES);
+                    if (chunk != null) {
+                        fileResult.chunks.add(chunk);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to fetch context for {}:{}: {}", sr.repository, sr.path, e.getMessage());
                 }
-            } catch (Exception e) {
-                log.warn("Failed to fetch context for {}:{}: {}", sr.repository, sr.path, e.getMessage());
             }
 
             searchResponse.results.add(fileResult);

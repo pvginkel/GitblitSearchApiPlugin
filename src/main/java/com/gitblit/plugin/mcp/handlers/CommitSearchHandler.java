@@ -56,19 +56,16 @@ public class CommitSearchHandler implements RequestHandler {
             return;
         }
 
-        // Reject wildcard-only queries (causes Lucene errors)
-        if (isWildcardOnlyQuery(query)) {
-            ResponseWriter.writeError(response, HttpServletResponse.SC_BAD_REQUEST,
-                "Wildcard-only queries are not supported. Please provide a search term.");
-            return;
-        }
-
         String reposParam = request.getParameter("repos");
         if (StringUtils.isEmpty(reposParam)) {
             ResponseWriter.writeError(response, HttpServletResponse.SC_BAD_REQUEST,
                 "Missing required parameter: repos");
             return;
         }
+
+        // Check if this is a wildcard-only query (e.g., "*")
+        // Allowed since repos is required, which prevents unbounded results
+        boolean isWildcardQuery = isWildcardOnlyQuery(query);
 
         // Parse optional parameters
         String authors = request.getParameter("authors");
@@ -83,8 +80,10 @@ public class CommitSearchHandler implements RequestHandler {
         StringBuilder luceneQuery = new StringBuilder();
         luceneQuery.append("type:commit");
 
-        // Add the user's query
-        luceneQuery.append(" AND (").append(query).append(")");
+        // Add the user's query (skip for wildcard queries - just match all commits)
+        if (!isWildcardQuery) {
+            luceneQuery.append(" AND (").append(query).append(")");
+        }
 
         // Add authors filter (OR logic)
         if (!StringUtils.isEmpty(authors)) {

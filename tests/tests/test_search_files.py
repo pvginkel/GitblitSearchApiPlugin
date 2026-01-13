@@ -195,24 +195,56 @@ class TestFileSearchEndpoint:
         assert "type:blob" in data["query"]
         assert "test" in data["query"]
 
-    def test_wildcard_only_query_returns_error(self, api_client, indexed_repo):
-        """Test that wildcard-only queries return a 400 error instead of crashing.
+    def test_wildcard_query_without_filters_returns_error(self, api_client):
+        """Test that wildcard-only queries without filters return a 400 error.
 
-        Regression test for issue where query='*' caused a Lucene error and
-        returned an HTML error page instead of JSON.
+        Wildcard queries require at least one filter (repos, pathPattern, or branch)
+        to prevent unbounded results.
         """
-        # Test various wildcard-only patterns
-        wildcard_queries = ["*", "?", "* *", "**", "*?*"]
+        # Without any filters, should return error
+        response = api_client.get("search/files", {"query": "*"})
 
-        for query in wildcard_queries:
-            response = api_client.search_files(query=query, repos=indexed_repo)
+        assert response.status_code == 400, \
+            f"Wildcard without filters should return 400, got {response.status_code}"
 
-            # Should return 400 Bad Request, not 500
-            assert response.status_code == 400, \
-                f"Query '{query}' should return 400, got {response.status_code}"
+        data = response.json()
+        assert "error" in data
+        assert "filter" in data["error"].lower(), \
+            f"Error should mention filter requirement: {data['error']}"
 
-            # Should return valid JSON error
-            data = response.json()
-            assert "error" in data, f"Query '{query}' should return JSON error"
-            assert "wildcard" in data["error"].lower(), \
-                f"Error message should mention wildcard: {data['error']}"
+    def test_wildcard_query_with_repos_returns_results(self, api_client, indexed_repo):
+        """Test that wildcard queries with repos filter return results.
+
+        query='*' with repos should return all indexed files in the repository,
+        useful for browsing/discovery scenarios.
+        """
+        response = api_client.search_files(query="*", repos=indexed_repo, count=10)
+
+        assert response.status_code == 200, \
+            f"Wildcard with repos should return 200, got {response.status_code}"
+
+        data = response.json()
+        assert "results" in data
+        assert len(data["results"]) > 0, "Wildcard query should return results"
+
+        # Wildcard queries should not include content chunks (to reduce response size)
+        for result in data["results"]:
+            assert result["chunks"] == [], \
+                "Wildcard queries should not include content chunks"
+
+    def test_wildcard_query_with_path_pattern(self, api_client, indexed_repo):
+        """Test wildcard query with pathPattern filter for file discovery."""
+        response = api_client.search_files(
+            query="*",
+            repos=indexed_repo,
+            path_pattern="*.cs",
+            count=10
+        )
+
+        assert response.status_code == 200
+
+        data = response.json()
+        # All results should match the path pattern
+        for result in data["results"]:
+            assert result["path"].endswith(".cs"), \
+                f"Result {result['path']} should match *.cs pattern"
