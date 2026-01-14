@@ -43,24 +43,28 @@ def api_client(session, api_url):
             response = self.session.get(url, params=params)
             return response
 
-        def repos(self, query=None, limit=None, after=None):
+        def repos(self, query=None, limit=None, offset=None):
             """GET /repos endpoint."""
             params = {}
             if query:
                 params["query"] = query
             if limit:
                 params["limit"] = limit
-            if after:
-                params["after"] = after
+            if offset is not None:
+                params["offset"] = offset
             return self.get("repos", params or None)
 
-        def files(self, repo, path=None, revision=None):
+        def files(self, repo, path=None, revision=None, limit=None, offset=None):
             """GET /files endpoint."""
             params = {"repo": repo}
             if path:
                 params["path"] = path
             if revision:
                 params["revision"] = revision
+            if limit:
+                params["limit"] = limit
+            if offset is not None:
+                params["offset"] = offset
             return self.get("files", params)
 
         def file(self, repo, path, revision=None, start_line=None, end_line=None):
@@ -75,8 +79,8 @@ def api_client(session, api_url):
             return self.get("file", params)
 
         def search_files(
-            self, query, repos=None, path_pattern=None, branch=None, count=None,
-            context_lines=None
+            self, query, repos=None, path_pattern=None, branch=None, limit=None,
+            offset=None, context_lines=None
         ):
             """GET /search/files endpoint."""
             params = {"query": query}
@@ -86,13 +90,17 @@ def api_client(session, api_url):
                 params["pathPattern"] = path_pattern
             if branch:
                 params["branch"] = branch
-            if count:
-                params["count"] = count
+            if limit:
+                params["limit"] = limit
+            if offset is not None:
+                params["offset"] = offset
             if context_lines is not None:
                 params["contextLines"] = context_lines
             return self.get("search/files", params)
 
-        def search_commits(self, query, repos, authors=None, branch=None, count=None):
+        def search_commits(
+            self, query, repos, authors=None, branch=None, limit=None, offset=None
+        ):
             """GET /search/commits endpoint."""
             params = {
                 "query": query,
@@ -104,11 +112,13 @@ def api_client(session, api_url):
                 )
             if branch:
                 params["branch"] = branch
-            if count:
-                params["count"] = count
+            if limit:
+                params["limit"] = limit
+            if offset is not None:
+                params["offset"] = offset
             return self.get("search/commits", params)
 
-        def find(self, path_pattern, repos=None, revision=None, limit=None):
+        def find(self, path_pattern, repos=None, revision=None, limit=None, offset=None):
             """GET /find endpoint."""
             params = {"pathPattern": path_pattern}
             if repos:
@@ -117,6 +127,8 @@ def api_client(session, api_url):
                 params["revision"] = revision
             if limit:
                 params["limit"] = limit
+            if offset is not None:
+                params["offset"] = offset
             return self.get("find", params)
 
     return APIClient(session, api_url)

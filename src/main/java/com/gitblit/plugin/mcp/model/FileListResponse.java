@@ -10,6 +10,8 @@ import java.util.List;
  */
 public class FileListResponse {
     public List<FileInfo> files;
+    public int totalCount;
+    public boolean limitHit;
 
     public static class FileInfo {
         public String path;

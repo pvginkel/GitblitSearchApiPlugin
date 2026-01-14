@@ -67,8 +67,12 @@ public class FindFilesHandler implements RequestHandler {
         String reposParam = request.getParameter("repos");
         String revisionParam = request.getParameter("revision");
         int limit = parseIntParam(request, "limit", DEFAULT_LIMIT);
+        int offset = parseIntParam(request, "offset", 0);
+
+        // Cap limit and ensure offset is non-negative
         if (limit < 1) limit = DEFAULT_LIMIT;
         if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+        if (offset < 0) offset = 0;
 
         // Get accessible repositories
         List<String> repos = getAccessibleRepositories(gitblit, user, reposParam);
@@ -82,20 +86,19 @@ public class FindFilesHandler implements RequestHandler {
         // Sort repositories alphabetically for predictable results
         Collections.sort(repos);
 
-        log.info("Find files: user={}, pattern='{}', repos={}, limit={}",
-                 user.username, pathPattern, repos.size(), limit);
+        log.info("Find files: user={}, pattern='{}', repos={}, limit={}, offset={}",
+                 user.username, pathPattern, repos.size(), limit, offset);
 
         // Build response
         FindFilesResponse result = new FindFilesResponse();
         result.pattern = pathPattern;
         result.results = new ArrayList<>();
-        int totalCount = 0;
-        boolean limitHit = false;
+        int totalMatched = 0;  // Total matches found (for totalCount)
+        int skipped = 0;       // Matches skipped due to offset
+        int collected = 0;     // Matches collected for result
 
         // Process each repository
         for (String repoName : repos) {
-            if (limitHit) break;
-
             Repository repository = null;
             RevWalk revWalk = null;
             TreeWalk treeWalk = null;
@@ -122,15 +125,22 @@ public class FindFilesHandler implements RequestHandler {
                 treeWalk.setRecursive(true);
 
                 while (treeWalk.next()) {
-                    if (totalCount >= limit) {
-                        limitHit = true;
-                        break;
-                    }
-
                     String path = treeWalk.getPathString();
                     if (matcher.matcher(path).matches()) {
-                        matches.add(path);
-                        totalCount++;
+                        totalMatched++;
+
+                        // Skip results before offset
+                        if (skipped < offset) {
+                            skipped++;
+                            continue;
+                        }
+
+                        // Only collect up to limit results
+                        if (collected < limit) {
+                            matches.add(path);
+                            collected++;
+                        }
+                        // Continue to count totalMatched even after limit
                     }
                 }
 
@@ -153,8 +163,8 @@ public class FindFilesHandler implements RequestHandler {
             }
         }
 
-        result.totalCount = totalCount;
-        result.limitHit = limitHit;
+        result.totalCount = totalMatched;
+        result.limitHit = (offset + collected) < totalMatched;
 
         ResponseWriter.writeJson(response, result);
     }

@@ -32,6 +32,9 @@ import com.gitblit.utils.StringUtils;
  */
 public class FilesHandler implements RequestHandler {
 
+    private static final int DEFAULT_LIMIT = 100;
+    private static final int MAX_LIMIT = 200;
+
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response,
                        IGitblit gitblit, UserModel user) throws IOException {
@@ -55,6 +58,15 @@ public class FilesHandler implements RequestHandler {
         }
 
         String revision = request.getParameter("revision");
+        int limit = parseIntParam(request, "limit", DEFAULT_LIMIT);
+        int offset = parseIntParam(request, "offset", 0);
+
+        // Cap limit
+        if (limit < 1) limit = DEFAULT_LIMIT;
+        if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+
+        // Ensure offset is non-negative
+        if (offset < 0) offset = 0;
 
         // Check repository access
         RepositoryModel repoModel = gitblit.getRepositoryModel(repoName);
@@ -131,11 +143,23 @@ public class FilesHandler implements RequestHandler {
             Collections.sort(directories, comparator);
             Collections.sort(files, comparator);
 
-            // Build response - directories first, then files
+            // Combine directories first, then files
+            List<FileListResponse.FileInfo> allFiles = new ArrayList<>();
+            allFiles.addAll(directories);
+            allFiles.addAll(files);
+
+            int totalCount = allFiles.size();
+
+            // Apply offset-based pagination
+            int startIndex = Math.min(offset, allFiles.size());
+            int endIndex = Math.min(startIndex + limit, allFiles.size());
+            List<FileListResponse.FileInfo> pageFiles = allFiles.subList(startIndex, endIndex);
+
+            // Build response
             FileListResponse result = new FileListResponse();
-            result.files = new ArrayList<>();
-            result.files.addAll(directories);
-            result.files.addAll(files);
+            result.files = new ArrayList<>(pageFiles);
+            result.totalCount = totalCount;
+            result.limitHit = endIndex < totalCount;
 
             ResponseWriter.writeJson(response, result);
 
@@ -164,6 +188,18 @@ public class FilesHandler implements RequestHandler {
             if (treeWalk != null) {
                 treeWalk.close();
             }
+        }
+    }
+
+    private int parseIntParam(HttpServletRequest request, String name, int defaultValue) {
+        String value = request.getParameter(name);
+        if (StringUtils.isEmpty(value)) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return defaultValue;
         }
     }
 }

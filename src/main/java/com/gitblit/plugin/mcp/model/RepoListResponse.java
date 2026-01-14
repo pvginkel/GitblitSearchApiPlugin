@@ -10,7 +10,8 @@ import java.util.List;
  */
 public class RepoListResponse {
     public List<RepoInfo> repositories;
-    public Pagination pagination;
+    public int totalCount;
+    public boolean limitHit;
 
     public static class RepoInfo {
         public String name;
@@ -23,18 +24,6 @@ public class RepoListResponse {
             this.description = description;
             this.lastChange = lastChange;
             this.hasCommits = hasCommits;
-        }
-    }
-
-    public static class Pagination {
-        public int totalCount;
-        public boolean hasNextPage;
-        public String endCursor;
-
-        public Pagination(int totalCount, boolean hasNextPage, String endCursor) {
-            this.totalCount = totalCount;
-            this.hasNextPage = hasNextPage;
-            this.endCursor = endCursor;
         }
     }
 }

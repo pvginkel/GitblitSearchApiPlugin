@@ -34,8 +34,8 @@ public class CommitSearchHandler implements RequestHandler {
 
     private static final Logger log = LoggerFactory.getLogger(CommitSearchHandler.class);
 
-    private static final int DEFAULT_COUNT = 25;
-    private static final int MAX_COUNT = 100;
+    private static final int DEFAULT_LIMIT = 25;
+    private static final int MAX_LIMIT = 100;
 
     private final SimpleDateFormat dateFormat;
 
@@ -70,11 +70,18 @@ public class CommitSearchHandler implements RequestHandler {
         // Parse optional parameters
         String authors = request.getParameter("authors");
         String branch = request.getParameter("branch");
-        int count = parseIntParam(request, "count", DEFAULT_COUNT);
 
-        // Cap count
-        if (count < 1) count = DEFAULT_COUNT;
-        if (count > MAX_COUNT) count = MAX_COUNT;
+        // Parse pagination parameters (support 'count' as deprecated alias for 'limit')
+        int limit = parseIntParam(request, "limit", -1);
+        if (limit < 0) {
+            limit = parseIntParam(request, "count", DEFAULT_LIMIT);  // Backward compatibility
+        }
+        int offset = parseIntParam(request, "offset", 0);
+
+        // Cap limit and ensure offset is non-negative
+        if (limit < 1) limit = DEFAULT_LIMIT;
+        if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+        if (offset < 0) offset = 0;
 
         // Build Lucene query
         StringBuilder luceneQuery = new StringBuilder();
@@ -125,24 +132,37 @@ public class CommitSearchHandler implements RequestHandler {
             return;
         }
 
-        // Execute search
+        // Execute search - fetch enough results to cover offset + limit
         String finalQuery = luceneQuery.toString();
-        log.info("Commit search: user={}, query='{}', repos={}", user.username, finalQuery, searchRepos.size());
+        log.info("Commit search: user={}, query='{}', repos={}, offset={}",
+                 user.username, finalQuery, searchRepos.size(), offset);
 
-        List<SearchResult> results = gitblit.search(finalQuery, 1, count, searchRepos);
+        int fetchCount = offset + limit;
+        List<SearchResult> results = gitblit.search(finalQuery, 1, fetchCount, searchRepos);
 
         // Build response
         CommitSearchResponse searchResponse = new CommitSearchResponse();
         searchResponse.query = finalQuery;
         searchResponse.totalCount = results.isEmpty() ? 0 : results.get(0).totalHits;
-        searchResponse.limitHit = searchResponse.totalCount > count;
         searchResponse.commits = new ArrayList<>();
 
-        // Process each result
+        // Process each result with offset support
+        int skipped = 0;
         for (SearchResult sr : results) {
             // Only include commit results
             if (sr.type != SearchObjectType.commit) {
                 continue;
+            }
+
+            // Skip results before offset
+            if (skipped < offset) {
+                skipped++;
+                continue;
+            }
+
+            // Stop adding results if we have enough
+            if (searchResponse.commits.size() >= limit) {
+                break;
             }
 
             CommitSearchResponse.CommitInfo commitInfo = new CommitSearchResponse.CommitInfo();
@@ -163,6 +183,9 @@ public class CommitSearchHandler implements RequestHandler {
 
             searchResponse.commits.add(commitInfo);
         }
+
+        // Set limitHit based on whether more results exist
+        searchResponse.limitHit = (offset + searchResponse.commits.size()) < searchResponse.totalCount;
 
         ResponseWriter.writeJson(response, searchResponse);
     }

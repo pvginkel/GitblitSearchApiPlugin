@@ -14,10 +14,9 @@ class TestReposEndpoint:
 
         data = response.json()
         assert "repositories" in data
-        assert "pagination" in data
+        assert "totalCount" in data
+        assert "limitHit" in data
         assert isinstance(data["repositories"], list)
-        assert "totalCount" in data["pagination"]
-        assert "hasNextPage" in data["pagination"]
 
     def test_list_repos_with_query(self, api_client):
         """Test filtering repositories by name."""
@@ -47,15 +46,14 @@ class TestReposEndpoint:
         assert len(data["repositories"]) <= 2
 
     def test_list_repos_pagination(self, api_client):
-        """Test cursor-based pagination."""
+        """Test offset-based pagination."""
         # Get first page
         first_page = api_client.repos(limit=1).json()
-        if first_page["pagination"]["totalCount"] < 2:
+        if first_page["totalCount"] < 2:
             pytest.skip("Not enough repositories for pagination test")
 
-        # Get second page using cursor
-        cursor = first_page["pagination"]["endCursor"]
-        second_page = api_client.repos(limit=1, after=cursor).json()
+        # Get second page using offset
+        second_page = api_client.repos(limit=1, offset=1).json()
 
         assert second_page["repositories"]
         # Second page should have different repos
@@ -77,3 +75,49 @@ class TestReposEndpoint:
         assert "hasCommits" in repo
         # lastChange may be null for empty repos
         assert "lastChange" in repo
+
+    def test_offset_skips_results(self, api_client):
+        """Test that offset correctly skips results."""
+        # Get all repos first
+        all_repos = api_client.repos(limit=100).json()
+        if all_repos["totalCount"] < 3:
+            pytest.skip("Not enough repositories for offset test")
+
+        # Get first 3 without offset
+        first_three = api_client.repos(limit=3, offset=0).json()
+        # Get repos starting from offset 2
+        offset_two = api_client.repos(limit=3, offset=2).json()
+
+        # First repo at offset 2 should be third repo from first page
+        assert offset_two["repositories"][0]["name"] == first_three["repositories"][2]["name"]
+
+    def test_limit_hit_correct(self, api_client):
+        """Test that limitHit is set correctly."""
+        # Get total count
+        all_repos = api_client.repos(limit=100).json()
+        total = all_repos["totalCount"]
+
+        if total <= 1:
+            pytest.skip("Not enough repositories for limitHit test")
+
+        # Request fewer than total
+        limited = api_client.repos(limit=1).json()
+        assert limited["limitHit"] is True
+
+        # Request all
+        all_results = api_client.repos(limit=total).json()
+        assert all_results["limitHit"] is False
+
+    def test_offset_beyond_total(self, api_client):
+        """Test that offset beyond total returns empty results."""
+        all_repos = api_client.repos().json()
+        total = all_repos["totalCount"]
+
+        # Request with offset beyond total
+        response = api_client.repos(offset=total + 100)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["repositories"] == []
+        assert data["totalCount"] == total
+        assert data["limitHit"] is False

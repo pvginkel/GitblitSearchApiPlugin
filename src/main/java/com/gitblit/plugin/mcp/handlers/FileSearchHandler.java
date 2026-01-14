@@ -36,8 +36,8 @@ public class FileSearchHandler implements RequestHandler {
 
     private static final Logger log = LoggerFactory.getLogger(FileSearchHandler.class);
 
-    private static final int DEFAULT_COUNT = 25;
-    private static final int MAX_COUNT = 100;
+    private static final int DEFAULT_LIMIT = 25;
+    private static final int MAX_LIMIT = 100;
     private static final int DEFAULT_CONTEXT_LINES = 10;
     private static final int MAX_CONTEXT_LINES = 200;
 
@@ -57,10 +57,16 @@ public class FileSearchHandler implements RequestHandler {
         String reposParam = request.getParameter("repos");
         String pathPattern = request.getParameter("pathPattern");
         String branch = request.getParameter("branch");
-        int count = parseIntParam(request, "count", DEFAULT_COUNT);
         int contextLines = parseIntParam(request, "contextLines", DEFAULT_CONTEXT_LINES);
         if (contextLines > MAX_CONTEXT_LINES) contextLines = MAX_CONTEXT_LINES;
         if (contextLines < 1) contextLines = DEFAULT_CONTEXT_LINES;
+
+        // Parse pagination parameters (support 'count' as deprecated alias for 'limit')
+        int limit = parseIntParam(request, "limit", -1);
+        if (limit < 0) {
+            limit = parseIntParam(request, "count", DEFAULT_LIMIT);  // Backward compatibility
+        }
+        int offset = parseIntParam(request, "offset", 0);
 
         // Check if this is a wildcard-only query (e.g., "*")
         boolean isWildcardQuery = isWildcardOnlyQuery(query);
@@ -77,9 +83,10 @@ public class FileSearchHandler implements RequestHandler {
             }
         }
 
-        // Cap count
-        if (count < 1) count = DEFAULT_COUNT;
-        if (count > MAX_COUNT) count = MAX_COUNT;
+        // Cap limit and ensure offset is non-negative
+        if (limit < 1) limit = DEFAULT_LIMIT;
+        if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+        if (offset < 0) offset = 0;
 
         // Build Lucene query
         StringBuilder luceneQuery = new StringBuilder();
@@ -128,13 +135,15 @@ public class FileSearchHandler implements RequestHandler {
             return;
         }
 
-        // Execute search - fetch more results if filtering to ensure we get enough matches
+        // Execute search - fetch more results if filtering or using offset
         String finalQuery = luceneQuery.toString();
-        log.info("File search: user={}, query='{}', repos={}, pathPattern='{}'",
-                 user.username, finalQuery, searchRepos.size(), pathPattern);
+        log.info("File search: user={}, query='{}', repos={}, pathPattern='{}', offset={}",
+                 user.username, finalQuery, searchRepos.size(), pathPattern, offset);
 
-        int fetchCount = (pathRegex != null) ? count * 4 : count;  // Fetch extra when filtering
-        if (fetchCount > MAX_COUNT) fetchCount = MAX_COUNT;
+        // Fetch enough results to cover offset + limit, plus extra when filtering
+        int fetchCount = offset + limit;
+        if (pathRegex != null) fetchCount = fetchCount * 4;  // Fetch extra when filtering
+        if (fetchCount > MAX_LIMIT * 4) fetchCount = MAX_LIMIT * 4;
 
         List<SearchResult> results = gitblit.search(finalQuery, 1, fetchCount, searchRepos);
 
@@ -145,7 +154,7 @@ public class FileSearchHandler implements RequestHandler {
 
         // Track filtered count when using pathPattern
         int filteredCount = 0;
-        boolean stoppedEarly = false;
+        int skipped = 0;
 
         // Process each result
         for (SearchResult sr : results) {
@@ -161,10 +170,15 @@ public class FileSearchHandler implements RequestHandler {
 
             filteredCount++;
 
+            // Skip results before offset
+            if (skipped < offset) {
+                skipped++;
+                continue;
+            }
+
             // Stop adding results if we have enough
-            if (searchResponse.results.size() >= count) {
-                stoppedEarly = true;
-                continue;  // Keep counting filtered results
+            if (searchResponse.results.size() >= limit) {
+                continue;  // Keep counting filtered results for totalCount
             }
 
             FileSearchResponse.FileSearchResult fileResult = new FileSearchResponse.FileSearchResult();
@@ -193,11 +207,11 @@ public class FileSearchHandler implements RequestHandler {
         if (pathRegex != null) {
             // When filtering, use the filtered count
             searchResponse.totalCount = filteredCount;
-            searchResponse.limitHit = stoppedEarly;
+            searchResponse.limitHit = (offset + searchResponse.results.size()) < filteredCount;
         } else {
             // Without filtering, use Lucene's total
             searchResponse.totalCount = results.isEmpty() ? 0 : results.get(0).totalHits;
-            searchResponse.limitHit = searchResponse.totalCount > count;
+            searchResponse.limitHit = (offset + searchResponse.results.size()) < searchResponse.totalCount;
         }
 
         ResponseWriter.writeJson(response, searchResponse);

@@ -23,6 +23,8 @@ class TestFilesEndpoint:
 
         data = response.json()
         assert "files" in data
+        assert "totalCount" in data
+        assert "limitHit" in data
         assert isinstance(data["files"], list)
 
     def test_list_files_structure(self, api_client, test_repo):
@@ -131,3 +133,40 @@ class TestFilesEndpoint:
         assert "error" in data, "Response should contain error message"
         assert "not found" in data["error"].lower(), \
             f"Error should mention 'not found': {data['error']}"
+
+    def test_pagination_limit(self, api_client, test_repo):
+        """Test that limit parameter restricts results."""
+        response = api_client.files(repo=test_repo, limit=2)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert len(data["files"]) <= 2
+
+    def test_pagination_offset(self, api_client, test_repo):
+        """Test that offset skips results correctly."""
+        # Get all files first
+        all_files = api_client.files(repo=test_repo).json()
+        if all_files["totalCount"] < 3:
+            pytest.skip("Not enough files for offset test")
+
+        # Get with offset
+        offset_response = api_client.files(repo=test_repo, limit=10, offset=1).json()
+
+        # First file with offset should be second file without offset
+        assert offset_response["files"][0]["path"] == all_files["files"][1]["path"]
+
+    def test_pagination_limit_hit(self, api_client, test_repo):
+        """Test that limitHit is set correctly."""
+        all_files = api_client.files(repo=test_repo).json()
+        total = all_files["totalCount"]
+
+        if total <= 1:
+            pytest.skip("Not enough files for limitHit test")
+
+        # Request fewer than total
+        limited = api_client.files(repo=test_repo, limit=1).json()
+        assert limited["limitHit"] is True
+
+        # Request all
+        all_results = api_client.files(repo=test_repo, limit=total).json()
+        assert all_results["limitHit"] is False

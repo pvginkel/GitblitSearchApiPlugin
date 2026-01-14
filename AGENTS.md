@@ -80,12 +80,12 @@ Base path: `/api/.mcp-internal`
 
 | Endpoint          | Method | Description                                                             |
 |-------------------|--------|-------------------------------------------------------------------------|
-| `/repos`          | GET    | List repositories (params: query, limit, after)                         |
-| `/files`          | GET    | List files in repo (params: repo, path, revision)                       |
+| `/repos`          | GET    | List repositories (params: query, limit, offset)                        |
+| `/files`          | GET    | List files in repo (params: repo, path, revision, limit, offset)        |
 | `/file`           | GET    | Read file content (params: repo, path, revision, startLine, endLine)    |
-| `/find`           | GET    | Find files by glob pattern (params: pathPattern, repos, revision, limit) |
-| `/search/files`   | GET    | Search file contents (params: query, repos, pathPattern, branch, count, contextLines) |
-| `/search/commits` | GET    | Search commits (params: query, repos, authors, branch, count)           |
+| `/find`           | GET    | Find files by glob pattern (params: pathPattern, repos, revision, limit, offset) |
+| `/search/files`   | GET    | Search file contents (params: query, repos, pathPattern, branch, limit, offset, contextLines) |
+| `/search/commits` | GET    | Search commits (params: query, repos, authors, branch, limit, offset)   |
 
 **Search Behavior:** When no `branch` parameter is provided, searches are automatically restricted to each repository's default branch to avoid duplicate results from multiple branches.
 
@@ -97,16 +97,15 @@ Base path: `/api/.mcp-internal`
 
 **Error Handling:** Use `ResponseWriter.writeError(response, statusCode, message)` for JSON error responses.
 
-**Pagination:** Cursor-based using repository/file name as cursor. Default limit: 50, max limit: 100.
+**Pagination:** Offset-based using `limit` and `offset` parameters. All list/search endpoints return `totalCount` and `limitHit` fields. Default limit: 50 (repos/files) or 25 (search), max limit: 100-200 depending on endpoint.
 
 **Search:** Builds Lucene queries with format `type:blob/commit AND (query) AND filters...`
 
 ## Important Constants
 
-- `DEFAULT_LIMIT = 50` - Default pagination/result limit
-- `MAX_LIMIT = 100` - Maximum pagination limit (repos, files); 200 for /find endpoint
-- `DEFAULT_COUNT = 25` - Default search results count
-- `MAX_COUNT = 100` - Maximum search results count
+- `DEFAULT_LIMIT = 50` - Default limit for repos (50), files (100), find (50)
+- `DEFAULT_LIMIT = 25` - Default limit for search endpoints
+- `MAX_LIMIT = 100` - Maximum limit for repos; 200 for files, find, search
 - `MAX_FILE_SIZE = 128 * 1024` - Maximum file size for reading (128KB)
 - `DEFAULT_CONTEXT_LINES = 10` - Default lines of context around search matches
 - `MAX_CONTEXT_LINES = 200` - Maximum lines of context (caps contextLines parameter)

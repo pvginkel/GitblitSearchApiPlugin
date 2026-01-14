@@ -104,7 +104,7 @@ class TestFileSearchEndpoint:
         The fix uses post-filtering in the plugin to avoid Lucene's wildcard issues.
         """
         # First, find a file extension that exists in the repo by doing an unfiltered search
-        response = api_client.search_files(query="public", repos=indexed_repo, count=50)
+        response = api_client.search_files(query="public", repos=indexed_repo, limit=50)
         assert response.status_code == 200
         unfiltered_data = response.json()
         unfiltered_total = unfiltered_data["totalCount"]
@@ -161,7 +161,7 @@ class TestFileSearchEndpoint:
 
     def test_search_with_count_limit(self, api_client, indexed_repo):
         """Test search result count limit."""
-        response = api_client.search_files(query="the", repos=indexed_repo, count=3)
+        response = api_client.search_files(query="the", repos=indexed_repo, limit=3)
         assert response.status_code == 200
 
         data = response.json()
@@ -218,7 +218,7 @@ class TestFileSearchEndpoint:
         query='*' with repos should return all indexed files in the repository,
         useful for browsing/discovery scenarios.
         """
-        response = api_client.search_files(query="*", repos=indexed_repo, count=10)
+        response = api_client.search_files(query="*", repos=indexed_repo, limit=10)
 
         assert response.status_code == 200, \
             f"Wildcard with repos should return 200, got {response.status_code}"
@@ -238,7 +238,7 @@ class TestFileSearchEndpoint:
             query="*",
             repos=indexed_repo,
             path_pattern="*.cs",
-            count=10
+            limit=10
         )
 
         assert response.status_code == 200

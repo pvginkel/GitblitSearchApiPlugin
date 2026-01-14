@@ -78,7 +78,7 @@ class TestCommitSearchEndpoint:
         response = api_client.search_commits(
             query="initial OR commit OR add OR fix OR update",
             repos=indexed_repo,
-            count=2
+            limit=2
         )
         assert response.status_code == 200
 
@@ -160,7 +160,7 @@ class TestCommitSearchEndpoint:
         query='*' with repos should return all indexed commits in the repository,
         useful for browsing recent commit history.
         """
-        response = api_client.search_commits(query="*", repos=indexed_repo, count=10)
+        response = api_client.search_commits(query="*", repos=indexed_repo, limit=10)
 
         assert response.status_code == 200, \
             f"Wildcard query should return 200, got {response.status_code}"
@@ -185,7 +185,7 @@ class TestCommitSearchEndpoint:
         response = api_client.search_commits(
             query="*",
             repos=indexed_repo,
-            count=20
+            limit=20
         )
         assert response.status_code == 200
 

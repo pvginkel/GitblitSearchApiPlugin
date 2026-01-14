@@ -44,11 +44,14 @@ public class ReposHandler implements RequestHandler {
         // Parse query parameters
         String query = request.getParameter("query");
         int limit = parseIntParam(request, "limit", DEFAULT_LIMIT);
-        String after = request.getParameter("after");
+        int offset = parseIntParam(request, "offset", 0);
 
         // Cap limit
         if (limit < 1) limit = DEFAULT_LIMIT;
         if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+
+        // Ensure offset is non-negative
+        if (offset < 0) offset = 0;
 
         // Get all accessible repositories
         List<RepositoryModel> allRepos = gitblit.getRepositoryModels(user);
@@ -72,18 +75,8 @@ public class ReposHandler implements RequestHandler {
 
         int totalCount = filteredRepos.size();
 
-        // Apply cursor-based pagination (after = repository name to start after)
-        int startIndex = 0;
-        if (!StringUtils.isEmpty(after)) {
-            for (int i = 0; i < filteredRepos.size(); i++) {
-                if (filteredRepos.get(i).name.equals(after)) {
-                    startIndex = i + 1;
-                    break;
-                }
-            }
-        }
-
-        // Get page of results
+        // Apply offset-based pagination
+        int startIndex = Math.min(offset, filteredRepos.size());
         int endIndex = Math.min(startIndex + limit, filteredRepos.size());
         List<RepositoryModel> pageRepos = filteredRepos.subList(startIndex, endIndex);
 
@@ -104,12 +97,9 @@ public class ReposHandler implements RequestHandler {
             result.repositories.add(info);
         }
 
-        // Build pagination info
-        boolean hasNextPage = endIndex < filteredRepos.size();
-        String endCursor = pageRepos.isEmpty() ? null :
-            pageRepos.get(pageRepos.size() - 1).name;
-
-        result.pagination = new RepoListResponse.Pagination(totalCount, hasNextPage, endCursor);
+        // Set pagination info
+        result.totalCount = totalCount;
+        result.limitHit = endIndex < totalCount;
 
         ResponseWriter.writeJson(response, result);
     }
