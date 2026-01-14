@@ -38,7 +38,8 @@ public class FileSearchHandler implements RequestHandler {
 
     private static final int DEFAULT_COUNT = 25;
     private static final int MAX_COUNT = 100;
-    private static final int CONTEXT_LINES = 100;  // Lines of context around match
+    private static final int DEFAULT_CONTEXT_LINES = 10;
+    private static final int MAX_CONTEXT_LINES = 200;
 
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response,
@@ -57,6 +58,9 @@ public class FileSearchHandler implements RequestHandler {
         String pathPattern = request.getParameter("pathPattern");
         String branch = request.getParameter("branch");
         int count = parseIntParam(request, "count", DEFAULT_COUNT);
+        int contextLines = parseIntParam(request, "contextLines", DEFAULT_CONTEXT_LINES);
+        if (contextLines > MAX_CONTEXT_LINES) contextLines = MAX_CONTEXT_LINES;
+        if (contextLines < 1) contextLines = DEFAULT_CONTEXT_LINES;
 
         // Check if this is a wildcard-only query (e.g., "*")
         boolean isWildcardQuery = isWildcardOnlyQuery(query);
@@ -89,11 +93,6 @@ public class FileSearchHandler implements RequestHandler {
         // Note: pathPattern is applied as post-filter because Lucene wildcard queries
         // with leading wildcards (like *.java) cause errors in Gitblit's highlighting code
 
-        // Add branch filter if provided
-        if (!StringUtils.isEmpty(branch)) {
-            luceneQuery.append(" AND branch:\"").append(branch).append("\"");
-        }
-
         // Compile path pattern for post-filtering
         Pattern pathRegex = null;
         if (!StringUtils.isEmpty(pathPattern)) {
@@ -102,6 +101,26 @@ public class FileSearchHandler implements RequestHandler {
 
         // Determine repositories to search
         List<String> searchRepos = getSearchRepositories(gitblit, user, reposParam);
+
+        // Add branch filter - use explicit branch or default branches
+        if (!StringUtils.isEmpty(branch)) {
+            luceneQuery.append(" AND branch:\"").append(branch).append("\"");
+        } else {
+            // Build filter using default branch of each repository
+            StringBuilder branchFilter = new StringBuilder();
+            for (String repoName : searchRepos) {
+                RepositoryModel model = gitblit.getRepositoryModel(repoName);
+                if (model != null && !StringUtils.isEmpty(model.HEAD)) {
+                    if (branchFilter.length() > 0) {
+                        branchFilter.append(" OR ");
+                    }
+                    branchFilter.append("branch:\"").append(model.HEAD).append("\"");
+                }
+            }
+            if (branchFilter.length() > 0) {
+                luceneQuery.append(" AND (").append(branchFilter).append(")");
+            }
+        }
 
         if (searchRepos.isEmpty()) {
             ResponseWriter.writeError(response, HttpServletResponse.SC_BAD_REQUEST,
@@ -158,7 +177,7 @@ public class FileSearchHandler implements RequestHandler {
             // Fetch context chunk (skip for wildcard queries to reduce response size)
             if (!isWildcardQuery) {
                 try {
-                    FileSearchResponse.Chunk chunk = fetchChunk(gitblit, sr, CONTEXT_LINES);
+                    FileSearchResponse.Chunk chunk = fetchChunk(gitblit, sr, contextLines);
                     if (chunk != null) {
                         fileResult.chunks.add(chunk);
                     }

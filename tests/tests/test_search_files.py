@@ -248,3 +248,99 @@ class TestFileSearchEndpoint:
         for result in data["results"]:
             assert result["path"].endswith(".cs"), \
                 f"Result {result['path']} should match *.cs pattern"
+
+    def test_context_lines_default(self, api_client, indexed_repo):
+        """Test that default context lines is 10 (reduced from 100)."""
+        response = api_client.search_files(query="public", repos=indexed_repo)
+        assert response.status_code == 200
+
+        data = response.json()
+        if not data["results"]:
+            pytest.skip("No search results to validate context")
+
+        for result in data["results"]:
+            if result["chunks"]:
+                chunk = result["chunks"][0]
+                # With default of 10 lines (5 before, 5 after), chunk should be small
+                lines_in_chunk = chunk["endLine"] - chunk["startLine"] + 1
+                # Should be around 10 lines or less (depending on file size/match position)
+                assert lines_in_chunk <= 15, \
+                    f"Default context should be ~10 lines, got {lines_in_chunk}"
+                break
+        else:
+            pytest.skip("No chunks in search results")
+
+    def test_context_lines_custom(self, api_client, indexed_repo):
+        """Test that contextLines parameter affects chunk size."""
+        # Request more context lines
+        response = api_client.search_files(
+            query="public",
+            repos=indexed_repo,
+            context_lines=50
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        if not data["results"]:
+            pytest.skip("No search results to validate context")
+
+        for result in data["results"]:
+            if result["chunks"]:
+                chunk = result["chunks"][0]
+                lines_in_chunk = chunk["endLine"] - chunk["startLine"] + 1
+                # With 50 context lines, should get more lines than default
+                # (unless file is smaller than 50 lines)
+                assert lines_in_chunk >= 10, \
+                    f"Custom context of 50 should return more lines, got {lines_in_chunk}"
+                break
+        else:
+            pytest.skip("No chunks in search results")
+
+    def test_context_lines_capped_at_max(self, api_client, indexed_repo):
+        """Test that contextLines is capped at 200."""
+        # Request excessive context lines
+        response = api_client.search_files(
+            query="public",
+            repos=indexed_repo,
+            context_lines=500
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        if not data["results"]:
+            pytest.skip("No search results to validate context")
+
+        for result in data["results"]:
+            if result["chunks"]:
+                chunk = result["chunks"][0]
+                lines_in_chunk = chunk["endLine"] - chunk["startLine"] + 1
+                # Should be capped at 200, so shouldn't exceed that much
+                assert lines_in_chunk <= 210, \
+                    f"Context should be capped at ~200 lines, got {lines_in_chunk}"
+                break
+        else:
+            pytest.skip("No chunks in search results")
+
+    def test_default_branch_filtering(self, api_client, indexed_repo):
+        """Test that omitting branch parameter searches only default branch.
+
+        When no branch is specified, results should only come from each
+        repository's default branch to avoid duplicates.
+        """
+        # Search without branch parameter
+        response = api_client.search_files(query="public", repos=indexed_repo)
+        assert response.status_code == 200
+
+        data = response.json()
+        if not data["results"]:
+            pytest.skip("No search results to validate branch filtering")
+
+        # All results should be from the same branch (the default branch)
+        branches = set()
+        for result in data["results"]:
+            if "branch" in result:
+                branches.add(result["branch"])
+
+        # Should only have results from one branch (the default)
+        assert len(branches) <= 1, \
+            f"Without branch filter, should only get default branch results, got: {branches}"

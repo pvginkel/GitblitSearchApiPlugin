@@ -174,3 +174,31 @@ class TestCommitSearchEndpoint:
             assert "repository" in commit
             assert "commit" in commit
             assert "author" in commit
+
+    def test_default_branch_filtering(self, api_client, indexed_repo):
+        """Test that omitting branch parameter searches only default branch.
+
+        When no branch is specified, results should only come from each
+        repository's default branch to avoid duplicates.
+        """
+        # Search without branch parameter
+        response = api_client.search_commits(
+            query="*",
+            repos=indexed_repo,
+            count=20
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        if not data["commits"]:
+            pytest.skip("No commit search results to validate branch filtering")
+
+        # All results should be from the same branch (the default branch)
+        branches = set()
+        for commit in data["commits"]:
+            if "branch" in commit:
+                branches.add(commit["branch"])
+
+        # Should only have results from one branch (the default)
+        assert len(branches) <= 1, \
+            f"Without branch filter, should only get default branch results, got: {branches}"

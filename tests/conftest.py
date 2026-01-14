@@ -75,7 +75,8 @@ def api_client(session, api_url):
             return self.get("file", params)
 
         def search_files(
-            self, query, repos=None, path_pattern=None, branch=None, count=None
+            self, query, repos=None, path_pattern=None, branch=None, count=None,
+            context_lines=None
         ):
             """GET /search/files endpoint."""
             params = {"query": query}
@@ -87,6 +88,8 @@ def api_client(session, api_url):
                 params["branch"] = branch
             if count:
                 params["count"] = count
+            if context_lines is not None:
+                params["contextLines"] = context_lines
             return self.get("search/files", params)
 
         def search_commits(self, query, repos, authors=None, branch=None, count=None):

@@ -81,8 +81,10 @@ Base path: `/api/.mcp-internal`
 | `/repos`          | GET    | List repositories (params: query, limit, after)                         |
 | `/files`          | GET    | List files in repo (params: repo, path, revision)                       |
 | `/file`           | GET    | Read file content (params: repo, path, revision, startLine, endLine)    |
-| `/search/files`   | GET    | Search file contents (params: query, repos, pathPattern, branch, count) |
+| `/search/files`   | GET    | Search file contents (params: query, repos, pathPattern, branch, count, contextLines) |
 | `/search/commits` | GET    | Search commits (params: query, repos, authors, branch, count)           |
+
+**Search Behavior:** When no `branch` parameter is provided, searches are automatically restricted to each repository's default branch to avoid duplicate results from multiple branches.
 
 ## Key Patterns
 
@@ -103,7 +105,8 @@ Base path: `/api/.mcp-internal`
 - `DEFAULT_COUNT = 25` - Default search results count
 - `MAX_COUNT = 100` - Maximum search results count
 - `MAX_FILE_SIZE = 128 * 1024` - Maximum file size for reading (128KB)
-- `DEFAULT_CONTEXT_LINES = 100` - Lines of context around search matches
+- `DEFAULT_CONTEXT_LINES = 10` - Default lines of context around search matches
+- `MAX_CONTEXT_LINES = 200` - Maximum lines of context (caps contextLines parameter)
 
 ## Code Conventions
 

@@ -96,13 +96,28 @@ public class CommitSearchHandler implements RequestHandler {
             luceneQuery.append(")");
         }
 
-        // Add branch filter
-        if (!StringUtils.isEmpty(branch)) {
-            luceneQuery.append(" AND branch:\"").append(branch).append("\"");
-        }
-
         // Determine repositories to search
         List<String> searchRepos = getSearchRepositories(gitblit, user, reposParam);
+
+        // Add branch filter - use explicit branch or default branches
+        if (!StringUtils.isEmpty(branch)) {
+            luceneQuery.append(" AND branch:\"").append(branch).append("\"");
+        } else {
+            // Build filter using default branch of each repository
+            StringBuilder branchFilter = new StringBuilder();
+            for (String repoName : searchRepos) {
+                RepositoryModel model = gitblit.getRepositoryModel(repoName);
+                if (model != null && !StringUtils.isEmpty(model.HEAD)) {
+                    if (branchFilter.length() > 0) {
+                        branchFilter.append(" OR ");
+                    }
+                    branchFilter.append("branch:\"").append(model.HEAD).append("\"");
+                }
+            }
+            if (branchFilter.length() > 0) {
+                luceneQuery.append(" AND (").append(branchFilter).append(")");
+            }
+        }
 
         if (searchRepos.isEmpty()) {
             ResponseWriter.writeError(response, HttpServletResponse.SC_BAD_REQUEST,
